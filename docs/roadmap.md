@@ -1,9 +1,9 @@
 # Document 3 — Implementation Roadmap
 
-**Title:** Meeting Companion — Implementation Roadmap
+**Title:** Nitpicker — Implementation Roadmap
 **Version:** 1.1.0
 **Date:** 2026-10-04
-**Status:** Draft (supersedes v1.0.0)
+**Status:** Approved (supersedes v1.0.0)
 **Baseline:** Doc 1 v1.0.0 (Design Document, approved 2026-10-04); Doc 2 v1.1.0 (Technical Specification, fully re-delivered standalone text, 2026-10-04).
 **Reference binding:** In this document, "Doc 1" ≡ Doc 1 v1.0.0 and "Doc 2" ≡ Doc 2 v1.1.0. All section citations resolve against these versions. Version pins are stated explicitly wherever the citation is load-bearing (§3, §5, §6, §7).
 **Prepared per:** Multiphase Interview Tech Docs workflow v1.2.0.
@@ -103,7 +103,7 @@ Spec refs: Doc 2 §5.1 (DDL verbatim: CHECKs, UNIQUEs, indices, `segmentation_pe
 Tasks: (1) all §8.0 types incl. `SettingsSnapshot`; (2) 7 entity classes mapping the DDL 1:1; (3) DAO interfaces with transactional claim semantics (`claimNextForAsr`, `claimNextForSegmentation` idempotent-guard, `claimNextPending`); (4) `AppDatabase` v1, `exportSchema = true`; (5) DAO round-trip tests (insert/claim/state-transition via DAOs — the DAO is the code under test).
 Contracts: consumed Doc 2 §5/§8.0 → produced all entities, DAOs, `AppDatabase`, domain types.
 Acceptance: DDL fidelity (constraints and indices present in schema JSON); claim operations are transactional and re-claim-safe.
-Verification: `./gradlew :app:testDebugUnitTest --tests "com.meetingcompanion.data.db.*"` green.
+Verification: `./gradlew :app:testDebugUnitTest --tests "com.nitpicker.data.db.*"` green.
 
 ---
 
@@ -221,7 +221,7 @@ Verification: `--tests "…pipeline.PipelineOrchestrator*"` green (full).
 *Objective:* Markdown rendering and the two document sinks — the durable deliverable of every session.
 Scope: `export/DocumentSink.kt` (interface + `MediaStoreDocumentsSink`), `export/MarkdownExporter.kt`, `test/…/fakes/InMemoryDocumentSink.kt`. Out of scope: export triggers (service/UI).
 Spec refs: Doc 2 §6.3 (template, filename, gap markers), §8.11, §8.14 mapping rules.
-Tasks: (1) interface + MediaStore impl (Documents, `MeetingCompanion/`, `text/markdown`); (2) renderer: header block, timestamped speaker lines with mapping overlay and `?` suffix, italic family-prefixed annotations, transcription/recording gap markers, filename `protocol-YYYY-MM-DD-HHmm-{DE|EN}.md`; (3) `ExportModel` assembly via `repo.sessionForExport`; (4) tests: pure rendering units (filename, timestamp format, gap markers); mapping resolution tested with mappings created via `repo.upsertMapping` (production path); full-session rendering deferred to WP-20 TC-PIPE-4.
+Tasks: (1) interface + MediaStore impl (Documents, `Nitpicker/`, `text/markdown`); (2) renderer: header block, timestamped speaker lines with mapping overlay and `?` suffix, italic family-prefixed annotations, transcription/recording gap markers, filename `protocol-YYYY-MM-DD-HHmm-{DE|EN}.md`; (3) `ExportModel` assembly via `repo.sessionForExport`; (4) tests: pure rendering units (filename, timestamp format, gap markers); mapping resolution tested with mappings created via `repo.upsertMapping` (production path); full-session rendering deferred to WP-20 TC-PIPE-4.
 Contracts: consumed repo, `SpeakerMapping` semantics → produced `MarkdownExporter`, `DocumentSink`, both sinks.
 Acceptance: mapped names replace raw tags at render; raw tags remain untouched in DB (D-5).
 Verification: `--tests "…export.*"` green.
@@ -278,7 +278,7 @@ Scope: `ui/LiveScreen.kt` + `LiveViewModel.kt`, `ui/common/StatusPanel.kt`. Out 
 Spec refs: Doc 2 §8.14 (Live row: flows, keep-screen-on, auto-scroll/pause/jump, provisional `…`, italics, Stop, STOPPING + force-finalize, StatusPanel), §10.
 Tasks: (1) combined `Flow<List<StatementView>>` from statements + annotations + mappings; (2) `PipelineSnapshot` StateFlow → collapsible StatusPanel; (3) `FLAG_KEEP_SCREEN_ON`; auto-scroll with pause-on-scroll-up and jump-to-latest chip; (4) provisional trailing `…`; annotations as italic family-prefixed lines; (5) Stop → ACTION_STOP; STOPPING state with Force-finalize button; (6) `StatementView`/`AnnotationView` mapping (Doc 2 §8.14).
 Contracts: consumed repo flows, metrics, service intents → produced LiveScreen.
-Acceptance: build green. **M3 smoke (operator, on-device, real API key):** start DE session → converse 2 min, two voices → statements appear ≤10 s → annotations ≤14 s → stop → export file exists in Documents/MeetingCompanion → protocol complete.
+Acceptance: build green. **M3 smoke (operator, on-device, real API key):** start DE session → converse 2 min, two voices → statements appear ≤10 s → annotations ≤14 s → stop → export file exists in Documents/Nitpicker → protocol complete.
 Verification: `./gradlew :app:assembleDebug`; M3 smoke procedure executed and recorded in `docs/wp-reports/WP-18.md`.
 
 ---

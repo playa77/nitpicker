@@ -1,9 +1,9 @@
 # Document 2 — Technical Specification
 
-**Title:** Meeting Companion — Technical Specification
+**Title:** Nitpicker — Technical Specification
 **Version:** 1.1.0
 **Date:** 2026-10-04
-**Status:** Draft (supersedes v1.0.0, approved 2026-10-04)
+**Status:** Approved (supersedes v1.0.0, approved 2026-10-04)
 **Baseline:** Doc 1 v1.0.0 (Design Document), approved 2026-10-04. Cross-references cite "Doc 1 §x". Document 3 v1.0.0 (Implementation Roadmap) is composed against this v1.1.0.
 **Prepared per:** Multiphase Interview Tech Docs workflow v1.2.0.
 
@@ -35,14 +35,14 @@
 ## 2. Project Structure
 
 ```
-MeetingCompanion/
+Nitpicker/
 ├── settings.gradle.kts, build.gradle.kts, gradle/libs.versions.toml
 ├── keystore.properties                        (git-ignored; release signing)
 └── app/
     └── src/
         ├── main/
         │   ├── AndroidManifest.xml
-        │   └── kotlin/com/meetingcompanion/
+        │   └── kotlin/com/nitpicker/
         │       ├── CompanionApp.kt             Application; constructs AppContainer
         │       ├── di/AppContainer.kt          composition root (§15)
         │       ├── domain/Types.kt             all shared domain types (§8.0)
@@ -84,7 +84,7 @@ MeetingCompanion/
         │           ├── DetailScreen.kt+ DetailViewModel.kt
         │           ├── SettingsScreen.kt + SettingsViewModel.kt
         │           └── common/StatusPanel.kt
-        └── test/kotlin/com/meetingcompanion/
+        └── test/kotlin/com/nitpicker/
             ├── harness/PipelineHarness.kt      real components + scripted transport
             ├── fakes/ScriptedChatTransport.kt, FakeNetworkGate.kt, InMemoryDocumentSink.kt
             └── … test classes per §12
@@ -153,7 +153,7 @@ class SettingsStore(context: Context) {
 | `RETRY_POLICY` | 3 attempts, backoff 2 s / 8 s / 32 s, ±20 % jitter; 429 honors `Retry-After` (cap 60 s) | §11 |
 | `HTTP_TIMEOUTS` | connect 10 s, write 30 s, read 120 s | §11 |
 | `RETAINED_SESSIONS_KEEP` | 10 | PDD-4 |
-| `EXPORT_DIR` | MediaStore Documents, relative path `MeetingCompanion/` | R-F10 |
+| `EXPORT_DIR` | MediaStore Documents, relative path `Nitpicker/` | R-F10 |
 | `LOG_FILE_CAP` | 512 KB per session, head-truncated | §10 |
 
 ---
@@ -359,7 +359,7 @@ data class GatewayConfig(val baseUrl: String = OPENROUTER_BASE_URL,
 class OpenRouterGateway(cfg: GatewayConfig) : ChatTransport   // OkHttp; throws typed errors (§11)
 ```
 
-`POST {baseUrl}/chat/completions`; headers: `Authorization: Bearer <key>`, `Content-Type: application/json`; [PROPOSED DESIGN DECISION D-12] optional `HTTP-Referer: meetingcompanion.local`, `X-Title: MeetingCompanion` per OpenRouter's attribution convention — harmless, skippable. The concrete audio-part parameterization follows the shape already validated by the operator's single-speaker tests (Doc 1 A-6); the DTOs below are the internal contract and are the only place that shape is expressed.
+`POST {baseUrl}/chat/completions`; headers: `Authorization: Bearer <key>`, `Content-Type: application/json`; [PROPOSED DESIGN DECISION D-12] optional `HTTP-Referer: nitpicker.local`, `X-Title: Nitpicker` per OpenRouter's attribution convention — harmless, skippable. The concrete audio-part parameterization follows the shape already validated by the operator's single-speaker tests (Doc 1 A-6); the DTOs below are the internal contract and are the only place that shape is expressed.
 
 ### 6.2 DTOs (llm/ChatModels.kt)
 
@@ -641,7 +641,7 @@ Reads `repo.sessionForExport` (production read path), applies `speaker_mappings`
 
 **[00:04:15] S1:** …
 ```
-FAILED-chunk gaps render as `[transcription gap mm:ss]`; recording gaps as `[recording gap …]`. Filename: `protocol-YYYY-MM-DD-HHmm-{DE|EN}.md`. `DocumentSink` production impl: `MediaStoreDocumentsSink` (MediaStore Documents collection, relative path `MeetingCompanion/`, MIME `text/markdown`). **Called by:** SessionService (auto at stop), DetailViewModel (re-export). **Tested against** `InMemoryDocumentSink` (§12) — MediaStore impl itself verified on-device (AC-3).
+FAILED-chunk gaps render as `[transcription gap mm:ss]`; recording gaps as `[recording gap …]`. Filename: `protocol-YYYY-MM-DD-HHmm-{DE|EN}.md`. `DocumentSink` production impl: `MediaStoreDocumentsSink` (MediaStore Documents collection, relative path `Nitpicker/`, MIME `text/markdown`). **Called by:** SessionService (auto at stop), DetailViewModel (re-export). **Tested against** `InMemoryDocumentSink` (§12) — MediaStore impl itself verified on-device (AC-3).
 
 ### 8.12 AnalysisEngine
 
@@ -768,7 +768,7 @@ Release signing via `keystore.properties` read in `build.gradle.kts` (never comm
 |---|---|---|
 | AC-1 | ≥80 % of statements visible ≤10 s after end-of-utterance; ≥80 % of annotations ≤14 s | live session; compare session-log statement offsets against retained-audio playback |
 | AC-2 | 90-min session, one forced 60 s Wi-Fi drop: zero lost chunks, ordered backfill | status panel + session log + export completeness |
-| AC-3 | Exported `.md` appears in Documents/MeetingCompanion, opens as valid Markdown | device file manager |
+| AC-3 | Exported `.md` appears in Documents/Nitpicker, opens as valid Markdown | device file manager |
 | AC-4 | Rename/merge in Detail → re-export reflects names; raw tags unchanged in DB | TC-PIPE-9 + manual |
 | AC-5 | Retention: files exist only for first N minutes; prune keeps ≤10 sessions | TC-PIPE-7 + device check |
 | AC-6 | Mic permission revoked mid-session → FAILED state + partial export offered | manual |
@@ -829,7 +829,7 @@ Release signing via `keystore.properties` read in `build.gradle.kts` (never comm
 
 **T4 — Network drop.** `gate.state → OFFLINE` → workers park before transport calls; capture path unaffected → `enqueueChunk` continues [**CAPTURED rows accumulate**] → `gate.state → ONLINE` → workers resume; claims processed in seq order; statements/annotations attach late (accepted, R-F12); status panel shows depth spike then drain.
 
-**T5 — Stop & export.** Stop button → `LiveViewModel.stop()` → Intent ACTION_STOP → `repo.setStatus(STOPPING)` [**STOPPING**] → `engine.stop()` (drains final chunk through S2–S4) → workers continue until `drainComplete` (queues empty ∧ segmentation pending empty) → `repo.finalizeSession` [**all PROVISIONAL → FINAL**] → `markdownExporter.export(sessionId)` → `documentSink.write(...)` [**.md in Documents/MeetingCompanion**] → `repo.setExportUri` + `setStatus(COMPLETED)` [**COMPLETED**] → LiveScreen shows outcome, service stops. Stall >120 s → Force finalize button → ACTION_FORCE_FINALIZE → export partial + remaining jobs/chunks FAILED.
+**T5 — Stop & export.** Stop button → `LiveViewModel.stop()` → Intent ACTION_STOP → `repo.setStatus(STOPPING)` [**STOPPING**] → `engine.stop()` (drains final chunk through S2–S4) → workers continue until `drainComplete` (queues empty ∧ segmentation pending empty) → `repo.finalizeSession` [**all PROVISIONAL → FINAL**] → `markdownExporter.export(sessionId)` → `documentSink.write(...)` [**.md in Documents/Nitpicker**] → `repo.setExportUri` + `setStatus(COMPLETED)` [**COMPLETED**] → LiveScreen shows outcome, service stops. Stall >120 s → Force finalize button → ACTION_FORCE_FINALIZE → export partial + remaining jobs/chunks FAILED.
 
 **T6 — Process death & recovery.** OS kills process mid-session → app relaunch → `CompanionApp` → `AppContainer` → `ListViewModel.activeOrStopping()` returns the session → user taps Recover → Intent ACTION_RESUME(sessionId) → service reconstructs engine + orchestrator → `recoverInFlight` [**ASR_PENDING→CAPTURED; IN_FLIGHT→PENDING**] → workers drain DB queues; recording gap start = death time; export marks `[recording gap …]`.
 

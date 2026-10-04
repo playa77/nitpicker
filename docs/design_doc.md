@@ -3,7 +3,7 @@
 **Title:** Nitpicker — Live Transcription, Protocol & Analysis App for Android
 **Version:** 1.0.0
 **Date:** 2026-10-04
-**Status:** Draft
+**Status:** Approved
 **Prepared per:** Multiphase Interview Tech Docs workflow v1.2.0; based on the accepted Interview Readiness Summary of 2026-10-04.
 
 **Revision History**
