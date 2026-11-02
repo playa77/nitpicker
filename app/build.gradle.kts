@@ -2,7 +2,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
@@ -10,12 +9,12 @@ plugins {
 
 android {
     namespace = "com.nitpicker"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.nitpicker"
         minSdk = 30
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 1
         versionName = "0.1.0"
     }
@@ -33,6 +32,17 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all {
+                it.jvmArgs(
+                    "--add-exports=java.base/jdk.internal.access=ALL-UNNAMED",
+                )
+            }
+        }
     }
 }
 
