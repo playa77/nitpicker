@@ -1,10 +1,10 @@
 # Document 2 — Technical Specification
 
 **Title:** Nitpicker — Technical Specification
-**Version:** 1.1.0
-**Date:** 2026-10-04
-**Status:** Approved (supersedes v1.0.0, approved 2026-10-04)
-**Baseline:** Doc 1 v1.0.0 (Design Document), approved 2026-10-04. Cross-references cite "Doc 1 §x". Document 3 v1.0.0 (Implementation Roadmap) is composed against this v1.1.0.
+**Version:** 1.2.0
+**Date:** 2026-11-08
+**Status:** Approved — endpoint revision explicitly authorized by the operator on 2026-11-08 (supersedes v1.1.0)
+**Baseline:** Doc 1 v1.1.0 (Design Document). Document 3 v1.2.0 (Implementation Roadmap) is re-audited against this v1.2.0. Cross-references cite "Doc 1 §x".
 **Prepared per:** Multiphase Interview Tech Docs workflow v1.2.0.
 
 **Revision History**
@@ -13,6 +13,8 @@
 |---|---|---|
 | 1.0.0 | 2026-10-04 | Initial draft, specifying Doc 1 v1.0.0 in full. |
 | 1.1.0 | 2026-10-04 | Type/file closure fixes discovered during Doc 3 composition: §8.0 gains `SettingsSnapshot` and §4.1 specifies `SettingsStore.snapshot()`; §8.13 gains `SessionLog.deleteForSession()`; §2 project tree gains `ui/MainActivity.kt` and `ui/navigation/AppNav.kt`; §8.7 prompt source listings cleaned of string-escaping artifacts (no prompt-text change). No behavioral or capability changes. |
+
+| 1.2.0 | 2026-11-08 | Operator-authorized correction after live API verification: ASR uses multipart `/audio/transcriptions` with binary WAV, ISO language and optional verbatim prompt; add `postTranscription` and typed request/response contracts. Chat completions remain the segmentation/analysis route. Update S7, T2, client and harness contracts. Provider guardrails remain an external access prerequisite. |
 
 ---
 
@@ -352,21 +354,32 @@ suspend fun queueDepthsFlow(sessionId: Long): Flow<Pair<Int, Int>>
 ### 6.1 Transport (OpenRouterGateway implements ChatTransport)
 
 ```kotlin
-interface ChatTransport { suspend fun postChat(req: ChatRequest): ChatResponse }
+interface ChatTransport {
+    suspend fun postChat(req: ChatRequest): ChatResponse
+    suspend fun postTranscription(req: TranscriptionRequest): TranscriptionResponse
+}
 data class GatewayConfig(val baseUrl: String = OPENROUTER_BASE_URL,
                          val apiKeyProvider: () -> String,
                          val retry: RetryPolicy = RetryPolicy(), val timeouts: HttpTimeouts = HttpTimeouts())
 class OpenRouterGateway(cfg: GatewayConfig) : ChatTransport   // OkHttp; throws typed errors (§11)
 ```
 
-`POST {baseUrl}/chat/completions`; headers: `Authorization: Bearer <key>`, `Content-Type: application/json`; [PROPOSED DESIGN DECISION D-12] optional `HTTP-Referer: nitpicker.local`, `X-Title: Nitpicker` per OpenRouter's attribution convention — harmless, skippable. The concrete audio-part parameterization follows the shape already validated by the operator's single-speaker tests (Doc 1 A-6); the DTOs below are the internal contract and are the only place that shape is expressed.
+Two explicit operations share one OpenRouter gateway, credential provider, retry budget, timeouts and typed errors:
+
+- `postChat`: `POST {baseUrl}/chat/completions`, `Content-Type: application/json`, for segmentation and analysis.
+- `postTranscription`: `POST {baseUrl}/audio/transcriptions`, `Content-Type: multipart/form-data` with a generated boundary. Fields: `model`, `language` (`de` or `en`), optional `prompt`, and `file` (`chunk.wav`, `audio/wav`, exact stored WAV bytes). No base64 wrapper or chat message is sent.
+
+Both send `Authorization: Bearer <key>`; optional attribution headers are `HTTP-Referer: nitpicker.local` and `X-Title: Nitpicker` (D-12). Redirects and hidden client retries are disabled. HTTP 404 caused by provider/data-policy/guardrail restrictions is a non-retryable routing/access error, not proof of an invalid API key. Do not switch models, bypass account policies, or change credentials automatically.
+
+Live verification on 2026-11-08 established that both configured transcription models explicitly reject the chat endpoint. This replaces the former A-6 request-shape assumption with a dedicated audio endpoint contract.
+
 
 ### 6.2 DTOs (llm/ChatModels.kt)
 
 ```kotlin
 @Serializable data class ChatRequest(val model: String, val messages: List<ChatMessage>)
 @Serializable data class ChatMessage(val role: String, val content: JsonElement)
-    // content = array of parts for ASR; plain string for LLM calls
+    // content = plain JSON string for segmentation/analysis; arrays are generic chat parts, not ASR
 @Serializable data class TextPart(val type: String = "text", val text: String)
 @Serializable data class AudioPart(val type: String = "input_audio",
                                    val input_audio: AudioData)
@@ -377,9 +390,17 @@ class OpenRouterGateway(cfg: GatewayConfig) : ChatTransport   // OkHttp; throws 
 @Serializable data class Usage(val total_tokens: Long?)
 ```
 
+The audio endpoint has a separate contract (the request is a multipart envelope, not JSON):
+
+```kotlin
+data class TranscriptionRequest(val model: String, val audioWav: ByteArray,
+    val language: Language, val prompt: String? = null)
+@Serializable data class TranscriptionResponse(val text: String)
+```
+
 ### 6.3 Call 1 — ASR (AsrClient)
 
-Request: model = settings `asr_model`; user message = [TextPart(Prompts.asrInstruction(language)), AudioPart(base64(chunk.audio_blob), "wav")]. Response → first non-blank `choices[0].message.content` as transcript; blank → `MalformedLlmOutputException("empty transcript")`. Output type: `TranscriptResult(chunkId, text)`.
+Build `TranscriptionRequest(model = settings.asrModel, audioWav = chunk.audio_blob, language = session.language, prompt = Prompts.asrInstruction(language))` and call `transport.postTranscription`. The language is encoded as `de`/`en` in the multipart envelope; the optional prompt preserves the verbatim/no-translation instruction. The `file` payload is byte-identical to the persisted/retained WAV. Decode the response JSON `text` field; blank text → `MalformedLlmOutputException("empty transcript")`. Output remains `TranscriptResult(chunkId, text)`. No chat `choices` extraction, base64 encoding, or translation endpoint is used for ASR.
 
 ### 6.4 Call 2 — Segmentation (StatementProcessor)
 
@@ -412,6 +433,7 @@ Parse validation: `family` must be `FACT_CHECK` or `LOGIC_RHETORIC` (else annota
 | HTTP 429 | honor `Retry-After` (≤60 s), retry within `RETRY_POLICY` budget |
 | HTTP 5xx / IOException | retry with backoff; exhausted → `OpenRouterHttpException`/`OpenRouterTimeoutException` to worker |
 | HTTP 401/403 | no retry → `OpenRouterAuthException`; session continues capturing; status panel shows "auth error", queues hold (fixable by key update) |
+| Other HTTP 4xx (including 404 provider/guardrail routing restrictions) | no retry → `OpenRouterHttpException(status)`; preserve the configured model and report the access restriction |
 | 200, unparsable body | `MalformedLlmOutputException` |
 
 ---
@@ -522,7 +544,7 @@ class AsrClient(private val transport: ChatTransport, private val settings: Sett
     suspend fun transcribe(chunk: AudioChunkRow): TranscriptResult
 }
 ```
-Builds request per §6.3 with `Prompts.asrInstruction(language)`; returns transcript. Latency measured around `transport.postChat` and reported via callback `onLatency: (Long) -> Unit` (wired to PipelineMetrics). **Called by:** PipelineOrchestrator.asrWorker.
+Builds request per §6.3 with `Prompts.asrInstruction(language)`; returns transcript. Latency measured around `transport.postTranscription` and reported via callback `onLatency: (Long) -> Unit` (wired to PipelineMetrics). **Called by:** PipelineOrchestrator.asrWorker.
 
 ### 8.7 Prompts (prompts/Prompts.kt — full contract text; the equal-standing requirement is enforced here, R-F6)
 
@@ -728,7 +750,7 @@ No other background work exists; app has no boot receiver, no sync, no alarms.
 
 **Test-construction rule (binding):** *a test may not hand-build the state the code under test is supposed to produce. Pre-existing state is established by calling the production path, never by direct fixture writes. A test that pre-builds its inputs verifies arithmetic while proving nothing about whether the pipeline can produce them.*
 
-**Harness:** `PipelineHarness` constructs the real `SessionRepository` (in-memory Room under Robolectric), real `Chunker`/`WavEncoder`/`AudioRetentionStore`/`MarkdownExporter`, real workers — with `ScriptedChatTransport` (canned ASR transcripts, segmentation payloads, analysis payloads, error scripts), `FakeNetworkGate`, `InMemoryDocumentSink`. Chunks are produced by feeding synthesized PCM (silence + speech-energy bursts) through `Chunker.offer` — the production chunking path (its production caller, AudioCaptureEngine, is hardware-bound and is covered by on-device acceptance only). Domain state (statements, annotations, jobs) is **only ever** created by driving the harness pipeline — tests assert against DB reads, never seed domain rows.
+**Harness:** `PipelineHarness` constructs the real `SessionRepository` (in-memory Room under Robolectric), real `Chunker`/`WavEncoder`/`AudioRetentionStore`/`MarkdownExporter`, real workers — with `ScriptedChatTransport` (typed `TranscriptionResponse` ASR transcripts, chat segmentation/analysis payloads, one sequential cross-endpoint response/error script), `FakeNetworkGate`, `InMemoryDocumentSink`. Chunks are produced by feeding synthesized PCM (silence + speech-energy bursts) through `Chunker.offer` — the production chunking path (its production caller, AudioCaptureEngine, is hardware-bound and is covered by on-device acceptance only). Domain state (statements, annotations, jobs) is **only ever** created by driving the harness pipeline — tests assert against DB reads, never seed domain rows.
 
 **Unit tests:** VAD boundaries (silence close, max-length close, min-speech merge); `WavEncoder` byte-exactness (fixed input → expected 44+PCM bytes); `Prompts` content (equal-priority clause present, internal-knowledge-only clause present, language injected, both families in schema — R-F6/CA-5 as testable contract); `LlmJsonParser` (fenced JSON, trailing text, repair path); claims cap enforcement; annotation validation (bad family dropped, quote substring rule); `MarkdownExporter` rendering against sessions built through the harness.
 
@@ -794,7 +816,7 @@ Release signing via `keystore.properties` read in `build.gradle.kts` (never comm
 | S4 | AudioCaptureEngine → SessionRepository | `enqueueChunk(sessionId, chunk)` | direct, suspend | **audio_chunks row CAPTURED + WAV blob** |
 | S5 | asrWorker → SessionRepository | `claimNextChunkForAsr(sessionId)` | direct | state ASR_PENDING (txn) |
 | S6 | asrWorker → AsrClient | `transcribe(AudioChunkRow): TranscriptResult` | direct | none (network only) |
-| S7 | AsrClient → ChatTransport | `postChat(ChatRequest): ChatResponse` | direct (HTTP) | none |
+| S7 | AsrClient → ChatTransport | `postTranscription(TranscriptionRequest): TranscriptionResponse` | direct (HTTP) | none |
 | S8 | asrWorker → SessionRepository | `saveTranscript(TranscriptResult)` | direct | transcript + ASR_DONE (txn) |
 | S9 | segWorker → SessionRepository | `claimNextChunkForSegmentation(sessionId)` | direct | claim marker |
 | S10 | segWorker → StatementProcessor | `segment(chunk, tail, tags, language): SegmentationResult` | direct | none |
@@ -823,7 +845,7 @@ Release signing via `keystore.properties` read in `build.gradle.kts` (never comm
 
 **T1 — Session start.** StartScreen button → `StartViewModel.start(DE)` → `context.startForegroundService(Intent(ACTION_START, language=DE))` → `SessionService.onStartCommand` → `startForeground(type=MICROPHONE)` → retrieve AppContainer deps → `repo.createSession(SessionParams(...))` [**sessions row ACTIVE**] → `retention.prune()` → construct `AudioCaptureEngine(sessionId, chunkMaxSec) { chunk → WavEncoder.toWav → repo.enqueueChunk }` → `engine.start(scope)` → `orchestrator.recoverInFlight(sessionId)` → `orchestrator.startWorkers(sessionId, scope)`. UI navigates to LiveScreen; `statementsFlow` emits empty list.
 
-**T2 — Utterance → statement → annotation.** AudioRecord frame → `engine` read loop → `chunker.offer(PcmFrame)` → silence/max close → `onChunkClosed(AudioChunkData)` → `WavEncoder.toWav` → `repo.enqueueChunk` [**CAPTURED + blob**] → asrWorker Flow emission → (gate ONLINE) `repo.claimNextChunkForAsr` [**ASR_PENDING**] → `asrClient.transcribe` → `transport.postChat` (HTTP, R-N1) → `TranscriptResult` → `repo.saveTranscript` [**transcript + ASR_DONE**] → segWorker → `repo.claimNextChunkForSegmentation` → tail context read → `statementProcessor.segment` → `transport.postChat` → `SegmentationResult` → `repo.applySegmentation` [**statements PROVISIONAL/FINAL + CHUNK analysis_job PENDING**] → LiveScreen recomposes via `statementsFlow` (statement visible; AC-1 clock stops here) → analysisWorker → `repo.claimNextAnalysisJob` [**IN_FLIGHT**] → `analysisEngine.analyze(ctx)` → `transport.postChat` → `AnalysisResult` → `repo.saveAnalysis` [**annotations + claims + DONE + chunk ANALYZED**] → `retention.retainIfNeeded(..., settings.snapshot())` → `repo.markDiscarded`/`nullBlob` [**DISCARDED; retained file if in window**] → annotation visible via `annotationsFlow` (AC-1 second clock stops).
+**T2 — Utterance → statement → annotation.** AudioRecord frame → `engine` read loop → `chunker.offer(PcmFrame)` → silence/max close → `onChunkClosed(AudioChunkData)` → `WavEncoder.toWav` → `repo.enqueueChunk` [**CAPTURED + blob**] → asrWorker Flow emission → (gate ONLINE) `repo.claimNextChunkForAsr` [**ASR_PENDING**] → `asrClient.transcribe` → `transport.postTranscription` (HTTP, R-N1) → `TranscriptResult` → `repo.saveTranscript` [**transcript + ASR_DONE**] → segWorker → `repo.claimNextChunkForSegmentation` → tail context read → `statementProcessor.segment` → `transport.postChat` → `SegmentationResult` → `repo.applySegmentation` [**statements PROVISIONAL/FINAL + CHUNK analysis_job PENDING**] → LiveScreen recomposes via `statementsFlow` (statement visible; AC-1 clock stops here) → analysisWorker → `repo.claimNextAnalysisJob` [**IN_FLIGHT**] → `analysisEngine.analyze(ctx)` → `transport.postChat` → `AnalysisResult` → `repo.saveAnalysis` [**annotations + claims + DONE + chunk ANALYZED**] → `retention.retainIfNeeded(..., settings.snapshot())` → `repo.markDiscarded`/`nullBlob` [**DISCARDED; retained file if in window**] → annotation visible via `annotationsFlow` (AC-1 second clock stops).
 
 **T3 — Continuation.** Chunk N+1 segmentation returns `continuesPrevious=true` → inside `applySegmentation`: `statementDao.extendStatement` (append text, extend end offset) + **always** insert REANALYSIS job [**statement extended + job PENDING**] → analysisWorker → `analyze` on fresh text → `saveAnalysis` deletes old annotations for target, inserts new [**replaced annotations**]. UI shows extended text in place (same statement id — Flow re-emits).
 
