@@ -20,11 +20,12 @@ class ConnectivityMonitorTest {
         val capabilities = NetworkCapabilities()
         shadowOf(capabilities).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
         shadow.setNetworkCapabilities(active, capabilities)
-        val before = shadow.networkCallbacks.size
+        val existing = shadow.networkCallbacks.toSet()
+        val before = existing.size
         val monitor = SystemConnectivityMonitor(RuntimeEnvironment.getApplication())
         assertEquals(NetworkState.OFFLINE, monitor.state.value)
         assertEquals(before + 1, shadow.networkCallbacks.size)
-        val callback = shadow.networkCallbacks.last()
+        val callback = shadow.networkCallbacks.single { it !in existing }
         shadowOf(capabilities).addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
         shadow.setNetworkCapabilities(active, capabilities)
         callback.onCapabilitiesChanged(active, capabilities)

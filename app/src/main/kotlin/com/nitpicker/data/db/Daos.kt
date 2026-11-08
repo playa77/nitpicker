@@ -61,18 +61,21 @@ abstract class ChunkDao {
     }
 
     @Query(
-        "UPDATE audio_chunks SET transcript=:transcript,state='ASR_DONE',last_error=NULL WHERE id=:id"
+        "UPDATE audio_chunks SET transcript=:transcript,state='ASR_DONE',last_error=NULL,attempt_count=0 WHERE id=:id"
     )
     abstract fun saveTranscript(id: Long, transcript: String)
 
     @Query("UPDATE audio_chunks SET state='FAILED',last_error=:error,audio_blob=NULL WHERE id=:id")
     abstract fun markFailed(id: Long, error: String)
 
+    @Query("UPDATE audio_chunks SET state='FAILED',last_error=:error WHERE id=:id")
+    abstract fun markFailedPreservingAudio(id: Long, error: String)
+
     @Query("SELECT * FROM segmentation_pending WHERE session_id=:sessionId ORDER BY seq")
     abstract fun segmentationPending(sessionId: Long): List<SegmentationPending>
 
     @Query(
-        "UPDATE audio_chunks SET state='ASR_DONE' WHERE id=:id AND state='ASR_DONE' AND NOT EXISTS (SELECT 1 FROM analysis_jobs j WHERE j.session_id=audio_chunks.session_id AND j.chunk_seq=audio_chunks.seq AND j.reason='CHUNK')"
+        "UPDATE audio_chunks SET state='ASR_DONE',attempt_count=attempt_count+1 WHERE id=:id AND state='ASR_DONE' AND NOT EXISTS (SELECT 1 FROM analysis_jobs j WHERE j.session_id=audio_chunks.session_id AND j.chunk_seq=audio_chunks.seq AND j.reason='CHUNK')"
     )
     abstract fun guardSegmentation(id: Long): Int
 
@@ -85,7 +88,7 @@ abstract class ChunkDao {
                     ?.chunk ?: return@synchronized null
             if (guardSegmentation(c.id) != 1) return@synchronized null
             segmentationClaims.add(c.id)
-            c
+            get(c.id)
         }
 
     fun releaseSegmentationClaim(id: Long) {
@@ -97,6 +100,12 @@ abstract class ChunkDao {
 
     @Query("UPDATE audio_chunks SET state='DISCARDED',audio_blob=NULL WHERE id=:id")
     abstract fun markDiscarded(id: Long)
+
+    @Query("UPDATE audio_chunks SET state='CAPTURED',last_error=:error WHERE id=:id")
+    abstract fun requeue(id: Long, error: String)
+
+    @Query("UPDATE audio_chunks SET attempt_count=attempt_count+1 WHERE id=:id")
+    abstract fun bumpAttempt(id: Long)
 
     @Query("UPDATE audio_chunks SET audio_blob=NULL WHERE id=:id") abstract fun nullBlob(id: Long)
 
@@ -110,6 +119,15 @@ abstract class ChunkDao {
 
     @Query("SELECT * FROM audio_chunks WHERE session_id=:sessionId ORDER BY seq")
     abstract fun bySession(sessionId: Long): List<AudioChunkRow>
+
+    @Query("SELECT id,session_id,seq,started_at_offset_ms,duration_ms,NULL AS audio_blob,retained_path,state,transcript,attempt_count,last_error FROM audio_chunks WHERE session_id=:sessionId ORDER BY seq")
+    abstract fun metadataBySession(sessionId: Long): List<AudioChunkRow>
+
+    @Query("SELECT id,session_id,seq,started_at_offset_ms,duration_ms,NULL AS audio_blob,retained_path,state,transcript,attempt_count,last_error FROM audio_chunks WHERE session_id=:sessionId AND (state='ANALYZED' OR (state='FAILED' AND audio_blob IS NOT NULL)) ORDER BY seq")
+    abstract fun terminalMetadata(sessionId: Long): List<AudioChunkRow>
+
+    @Query("SELECT COUNT(*) FROM audio_chunks WHERE session_id=:sessionId AND (state IN ('CAPTURED','ASR_PENDING','ASR_DONE','ANALYZED') OR (state='FAILED' AND audio_blob IS NOT NULL))")
+    abstract fun unfinishedCount(sessionId: Long): Int
 
     @Query("SELECT audio_blob FROM audio_chunks WHERE id=:id")
     abstract fun loadBlob(id: Long): ByteArray?
@@ -251,6 +269,12 @@ abstract class AnalysisJobDao {
         "SELECT COUNT(*) FROM analysis_jobs WHERE session_id=:sessionId AND state IN ('PENDING','IN_FLIGHT')"
     )
     abstract fun pendingCountFlow(sessionId: Long): Flow<Int>
+
+    @Query("UPDATE analysis_jobs SET state='PENDING',last_error=:error WHERE id=:id")
+    abstract fun requeue(id: Long, error: String)
+
+    @Query("SELECT COUNT(*) FROM analysis_jobs WHERE session_id=:sessionId AND state IN ('PENDING','IN_FLIGHT')")
+    abstract fun unfinishedCount(sessionId: Long): Int
 
     @Query("SELECT * FROM analysis_jobs WHERE state='DONE'")
     abstract fun doneJobs(): List<AnalysisJobRow>

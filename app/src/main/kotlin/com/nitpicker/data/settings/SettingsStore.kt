@@ -35,6 +35,8 @@ internal constructor(
     private val retentionKey = intPreferencesKey("retention_minutes")
     private val chunkKey = intPreferencesKey("chunk_max_sec")
     private val vadKey = intPreferencesKey("vad_silence_ms")
+    // Ciphertext fingerprint changes when a key is replaced or cleared; never exposes the key.
+    val credentialVersion: Flow<Int> = store.data.map { (it[cipherKey] to it[ivKey]).hashCode() }.distinctUntilChanged()
     val apiKeySet: Flow<Boolean> =
         store.data
             .map { !it[cipherKey].isNullOrBlank() && !it[ivKey].isNullOrBlank() }

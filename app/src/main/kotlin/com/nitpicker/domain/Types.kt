@@ -125,6 +125,7 @@ data class PipelineSnapshot(
     val llmCalls: Int = 0,
     val asrFailures: Int = 0,
     val llmFailures: Int = 0,
+    val lastError: String? = null,
 )
 
 data class ExportOutcome(

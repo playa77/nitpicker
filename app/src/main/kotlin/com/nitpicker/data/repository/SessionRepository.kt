@@ -61,7 +61,7 @@ class SessionRepository(private val db: AppDatabase) {
 
     @Transaction
     suspend fun markChunkFailed(chunkId: Long, error: String) = transaction {
-        chunks.markFailed(chunkId, error)
+        chunks.markFailedPreservingAudio(chunkId, error)
         chunks.releaseSegmentationClaim(chunkId)
     }
 
@@ -245,6 +245,18 @@ class SessionRepository(private val db: AppDatabase) {
         )
     }
 
+    suspend fun sessionMetadata(sessionId: Long): SessionRow = transaction { requireNotNull(sessions.getById(sessionId)) }
+    suspend fun terminalChunks(sessionId: Long): List<AudioChunkRow> = transaction { chunks.terminalMetadata(sessionId) }
+    suspend fun chunkMetadata(sessionId: Long): List<AudioChunkRow> = transaction { chunks.metadataBySession(sessionId) }
+    suspend fun segmentationContext(sessionId: Long): Pair<String?, List<String>> = transaction {
+        statements.lastStatement(sessionId)?.text to statements.recentTags(sessionId, 6).reversed()
+    }
+    suspend fun sessionForDisplay(sessionId: Long): ExportModel = transaction {
+        val rows = statements.bySession(sessionId)
+        ExportModel(requireNotNull(sessions.getById(sessionId)), rows,
+            annotations.byStatements(rows.map { it.id }), mappings.bySession(sessionId), chunks.metadataBySession(sessionId))
+    }
+
     suspend fun statementsFlow(sessionId: Long): Flow<List<StatementRow>> =
         statements.statementsFlow(sessionId)
 
@@ -292,5 +304,26 @@ class SessionRepository(private val db: AppDatabase) {
     @Transaction
     suspend fun markAnalysisFailed(jobId: Long, error: String) = transaction {
         jobs.markFailed(jobId, error)
+    }
+
+    fun workChanges(): Flow<Set<String>> = db.invalidationTracker.createFlow(
+        "audio_chunks", "analysis_jobs", "statements", "sessions", "annotations", "speaker_mappings")
+
+    suspend fun hasPending(sessionId: Long): Boolean = transaction {
+        chunks.unfinishedCount(sessionId) > 0 || jobs.unfinishedCount(sessionId) > 0
+    }
+
+    suspend fun segmentationAttempt(id: Long): Int = transaction {
+        chunks.bumpAttempt(id)
+        requireNotNull(chunks.get(id)).attemptCount
+    }
+
+    suspend fun requeueChunk(id: Long, error: String) = transaction { chunks.requeue(id, error) }
+    suspend fun requeueAnalysis(id: Long, error: String) = transaction { jobs.requeue(id, error) }
+    suspend fun forceFailPending(sessionId: Long) = transaction {
+        chunks.bySession(sessionId).filter { it.state !in listOf(ChunkState.DISCARDED, ChunkState.FAILED) }
+            .forEach { chunks.markFailedPreservingAudio(it.id, "Force finalized") }
+        jobs.bySession(sessionId).filter { it.state in listOf(JobState.PENDING, JobState.IN_FLIGHT) }
+            .forEach { jobs.markFailed(it.id, "Force finalized") }
     }
 }

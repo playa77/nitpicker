@@ -1,6 +1,7 @@
 package com.nitpicker.fakes
 
 import com.nitpicker.llm.*
+import kotlinx.coroutines.flow.first
 
 sealed interface TransportCall {
     data class Chat(val request: ChatRequest) : TransportCall
@@ -9,7 +10,18 @@ sealed interface TransportCall {
 }
 
 /** One shared response/error script preserves order across both HTTP operations. */
-class ScriptedChatTransport(script: List<Result<Any>> = emptyList()) : ChatTransport {
+class ScriptedChatTransport(script: List<Result<Any>> = emptyList(), private val awaitTurn: Boolean = false) : ChatTransport {
+    private val revision = kotlinx.coroutines.flow.MutableStateFlow(0)
+    private suspend fun awaitOperation(audio: Boolean, analysis: Boolean = false) {
+        if (!awaitTurn) return
+        revision.first {
+            synchronized(lock) {
+                val next = outcomes.firstOrNull()?.getOrNull()
+                next == null || (audio && next is TranscriptionResponse) || (!audio && next is ChatResponse &&
+                    (next.choices.firstOrNull()?.message?.content?.contains("\"annotations\"") == analysis))
+            }
+        }
+    }
     private val lock = Any()
     private val outcomes = ArrayDeque(script)
     private val recorded = mutableListOf<TransportCall>()
@@ -49,18 +61,25 @@ class ScriptedChatTransport(script: List<Result<Any>> = emptyList()) : ChatTrans
     private fun take(call: TransportCall): Any {
         recorded.add(call)
         check(outcomes.isNotEmpty()) { "No scripted response for call ${recorded.size}" }
-        return outcomes.removeFirst().getOrThrow()
+        val result = outcomes.removeFirst()
+        revision.value += 1
+        return result.getOrThrow()
     }
 
-    override suspend fun postChat(req: ChatRequest): ChatResponse =
-        synchronized(lock) {
+    override suspend fun postChat(req: ChatRequest): ChatResponse {
+        awaitOperation(false, req.messages.firstOrNull()?.content.toString().contains("You analyze"))
+        return synchronized(lock) {
             take(TransportCall.Chat(req)) as? ChatResponse
                 ?: error("Expected a scripted chat response")
         }
 
-    override suspend fun postTranscription(req: TranscriptionRequest): TranscriptionResponse =
-        synchronized(lock) {
+    }
+
+    override suspend fun postTranscription(req: TranscriptionRequest): TranscriptionResponse {
+        awaitOperation(true)
+        return synchronized(lock) {
             take(TransportCall.Transcription(req)) as? TranscriptionResponse
                 ?: error("Expected a scripted transcription response")
         }
+    }
 }
