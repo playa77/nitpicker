@@ -51,9 +51,9 @@ class PipelineHarness {
         private set
     private lateinit var chunker: Chunker
     private var offset = 0L
-    suspend fun session(retentionMinutes: Int = 0): Long {
+    suspend fun session(retentionMinutes: Int = 0, language: Language = Language.EN, asrModel: String = SettingsStore.ASR_MODELS.first()): Long {
         settings.setRetentionMinutes(retentionMinutes)
-        id = repo.createSession(SessionParams(Language.EN, SettingsStore.ASR_MODELS.first(), retentionMinutes, 5, 400))
+        id = repo.createSession(SessionParams(language, asrModel, retentionMinutes, 5, 400))
         chunker = Chunker(id, 5, 400); offset = 0
         return id
     }

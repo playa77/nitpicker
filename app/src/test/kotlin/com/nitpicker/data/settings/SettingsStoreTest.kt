@@ -1,6 +1,7 @@
 package com.nitpicker.data.settings
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.edit
 import com.nitpicker.domain.SettingsSnapshot
 import javax.crypto.KeyGenerator
 import kotlinx.coroutines.*
@@ -77,5 +78,13 @@ class SettingsStoreTest {
         store.setApiKey("")
         assertFalse(store.apiKeySet.first())
         assertNull(store.apiKey())
+    }
+    @Test
+    fun removedModelFallsBackToMaiAndVoxtralPersists() = runBlocking {
+        data.edit { it[androidx.datastore.preferences.core.stringPreferencesKey("asr_model")] = "openai/whisper-large-v3-turbo" }
+        assertEquals(com.nitpicker.domain.DEFAULT_ASR_MODEL, store.snapshot().asrModel)
+        assertEquals(listOf(com.nitpicker.domain.DEFAULT_ASR_MODEL, com.nitpicker.domain.VOXTRAL_ASR_MODEL), SettingsStore.ASR_MODELS)
+        store.setAsrModel(com.nitpicker.domain.VOXTRAL_ASR_MODEL)
+        assertEquals(com.nitpicker.domain.VOXTRAL_ASR_MODEL, store.snapshot().asrModel)
     }
 }

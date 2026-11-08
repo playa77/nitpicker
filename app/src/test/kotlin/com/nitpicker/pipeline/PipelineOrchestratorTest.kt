@@ -53,4 +53,23 @@ class PipelineOrchestratorTest {
         assertEquals(SessionStatus.COMPLETED, h.repo.sessionForExport(h.id).session.status)
         assertEquals(0, h.transport.callCount)
     }
+    @Test fun recoveryNeverDispatchesRemovedModel() = runBlocking(Dispatchers.IO) {
+        h.session(asrModel = "openai/whisper-large-v3-turbo")
+        h.script(); h.pcmChunk(); h.start(); h.drain()
+        assertEquals(DEFAULT_ASR_MODEL, h.transport.transcriptionRequests.single().model)
+        assertEquals(DEFAULT_ASR_MODEL, h.repo.sessionMetadata(h.id).asrModel)
+    }
+
+    @Test fun recoveryPreservesVoxtralSelection() = runBlocking(Dispatchers.IO) {
+        h.session(asrModel = VOXTRAL_ASR_MODEL)
+        h.script(); h.pcmChunk(); h.start(); h.drain()
+        assertEquals(VOXTRAL_ASR_MODEL, h.transport.transcriptionRequests.single().model)
+    }
+    @Test fun recoveryDoesNotRewriteHistoricalCompletedSession() = runBlocking(Dispatchers.IO) {
+        val oldModel = "openai/whisper-large-v3-turbo"
+        h.session(asrModel = oldModel)
+        h.repo.setStatus(h.id, SessionStatus.COMPLETED)
+        h.repo.recoverInFlight(h.id)
+        assertEquals(oldModel, h.repo.sessionMetadata(h.id).asrModel)
+    }
 }

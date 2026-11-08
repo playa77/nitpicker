@@ -1,9 +1,9 @@
 # Document 1 — Design Document
 
 **Title:** Nitpicker — Live Transcription, Protocol & Analysis App for Android
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Date:** 2026-11-08
-**Status:** Approved — endpoint correction explicitly authorized by the operator on 2026-11-08
+**Status:** Approved — ASR model replacement explicitly authorized by the operator on 2026-11-08
 **Prepared per:** Multiphase Interview Tech Docs workflow v1.2.0; based on the accepted Interview Readiness Summary of 2026-10-04.
 
 **Revision History**
@@ -13,6 +13,8 @@
 | 1.0.0 | 2026-10-04 | Initial draft. |
 
 | 1.1.0 | 2026-11-08 | Correct the ASR request contract to multipart OpenRouter audio transcriptions, preserving binary WAV and session language; segmentation/analysis remain chat completions. Replaces the outdated A-6 chat-audio assumption following live verification. |
+
+| 1.2.0 | 2026-11-08 | Operator-authorized ASR selection change: retain Microsoft MAI-Transcribe 2 as default, remove OpenAI Whisper, and add Mistral Voxtral Mini Transcribe 3. Transport, language and pipeline scope remain unchanged. |
 
 ---
 
@@ -47,7 +49,7 @@ This section is the governing constraint register. Every later section must hono
 
 | ID | Requirement | Source |
 |---|---|---|
-| R-F1 | Live transcription of table audio via OpenRouter ASR (`openai/whisper-large-v3-turbo` or `microsoft/mai-transcribe-2`), stateless chunked requests | OR-1, CA-1, CA-2 |
+| R-F1 | Live transcription of table audio via OpenRouter ASR (`microsoft/mai-transcribe-2` or `mistralai/voxtral-mini-transcribe-3-0`), stateless chunked requests | OR-1, CA-1, CA-2 |
 | R-F2 | Continuous display and persistence of a protocol of discrete, timestamped statements | OR-2 |
 | R-F3 | Best-effort inferred speaker tags, marked as inferred, rename/merge after session | OR-3, CA-12 |
 | R-F4 | Fact-checking of factual claims (numbers, dates, quantities, names, assertions of fact) against model-internal knowledge only | OR-4, CA-5 |
@@ -205,13 +207,13 @@ Conceptual entities; exact DDL, indices, and migrations are Doc 2 §5 material. 
 
 ### 6.1 External: OpenRouter (audio transcriptions and chat completions — R-N1)
 
-Three request shapes. All use the operator's existing OpenRouter account and key. ASR uses the dedicated audio-transcriptions endpoint; segmentation and analysis use chat completions. Doc 2 v1.2.0 defines the exact transport contracts.
+Three request shapes. All use the operator's existing OpenRouter account and key. ASR uses the dedicated audio-transcriptions endpoint; segmentation and analysis use chat completions. Doc 2 v1.3.0 defines the exact transport contracts.
 
 **(a) ASR request** (AsrClient, per chunk): `POST /api/v1/audio/transcriptions`, multipart form-data:
 
 | Field | Value |
 |---|---|
-| `model` | `openai/whisper-large-v3-turbo` or `microsoft/mai-transcribe-2` |
+| `model` | `microsoft/mai-transcribe-2` or `mistralai/voxtral-mini-transcribe-3-0` |
 | `file` | `chunk.wav`, `audio/wav`, exact binary WAV upload bytes |
 | `language` | `de` or `en`, locked to the session |
 | `prompt` | Optional verbatim/no-translation instruction from `Prompts.asrInstruction` |
@@ -337,12 +339,12 @@ The retained first-minutes audio (exact upload bytes — PDD-4) enables the core
 | A-3 | Android 11 (API 30) minimum; A50 supports it | Raise minSdk if a required API forces it; A50 floor re-checked (R-N4 flag duty) |
 | A-4 | A50 sustains 90-min sessions within thermal/battery tolerance | Operational mitigation only (charger, brightness); no architectural fallback in scope |
 | A-5 | Retention facility is temporary with a defined end-state | None — commitment tracked, removal path designed (D-9) |
-| A-6 | Resolved 2026-11-08: live API requires multipart `/audio/transcriptions` for both configured ASR models | Corrected in this revision and Doc 2 v1.2.0; gateway and future AsrClient use the explicit transcription operation |
+| A-6 | Resolved 2026-11-08: live API requires multipart `/audio/transcriptions` for both configured ASR models | Corrected in this revision and Doc 2 v1.3.0; gateway and future AsrClient use the explicit transcription operation |
 
 ### 11.2 Open questions (validation-phase, not design-blocking)
 
 1. **Multi-speaker table audio quality** of both ASR models (risk 1) — answered empirically via the retained-audio debug workflow (§9.5) and the Doc 2 §14 early two-speaker live test. The choice between the two ASR models is an operator setting, not an architectural commitment.
-2. **mai-transcribe-2 routing stability on OpenRouter** — recently released model; if routing proves unreliable, whisper-large-v3-turbo is the standing alternative (both are first-class in the design).
+2. **mai-transcribe-2 routing stability on OpenRouter** — recently released model; if routing proves unreliable, voxtral-mini-transcribe-3-0 is the selectable alternative (both are first-class in the design).
 3. **False-positive rates of both analysis families** (risk 2) — calibrated during validation by reviewing annotations against retained audio; prompt-contract tuning is the lever, architectural impact nil.
 4. **German vs. English quality asymmetry** — both languages carry equal requirement weight (OR-12); per-language quality differences surface in the same validation loop.
 

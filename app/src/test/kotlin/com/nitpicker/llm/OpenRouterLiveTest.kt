@@ -10,7 +10,7 @@ import org.junit.Test
 
 /**
  * Opt in explicitly: NITPICKER_LIVE_OPENROUTER=1, with OPENROUTER_API_KEY injected. This exercises
- * only WP-07's gateway/DTO contracts; clients arrive in WP-10. The small speech fixture is
+ * the production gateway/DTO contracts. The small speech fixture is
  * synthesized locally, contains no meeting data.
  */
 class OpenRouterLiveTest {
@@ -23,24 +23,30 @@ class OpenRouterLiveTest {
         )
     }
 
-    private suspend fun asr(model: String) {
+    private suspend fun asr(model: String, language: Language = Language.EN) {
         val gateway = gateway()
-        val audio = javaClass.getResourceAsStream("/audio/meeting-en.wav")!!.use { it.readBytes() }
+        val audio = javaClass.getResourceAsStream("/audio/meeting-${language.name.lowercase()}.wav")!!.use { it.readBytes() }
+        val started = System.nanoTime()
         val response =
             gateway.postTranscription(
-                TranscriptionRequest(model, audio, Language.EN, Prompts.asrInstruction(Language.EN))
+                TranscriptionRequest(model, audio, language, Prompts.asrInstruction(language))
             )
+        println("ASR live: $model $language ${(System.nanoTime() - started) / 1_000_000}ms")
         val transcript = response.text
         assertTrue(
             "ASR must return the known speech fixture",
-            transcript.contains("meeting", ignoreCase = true) &&
+            transcript.contains(if (language == Language.EN) "meeting" else "Besprechung", ignoreCase = true) &&
                 transcript.contains("budget", ignoreCase = true),
         )
     }
 
-    @Test fun whisperAudioContract() = runBlocking { asr("openai/whisper-large-v3-turbo") }
+    @Test fun voxtralEnglishAudioContract() = runBlocking { asr(VOXTRAL_ASR_MODEL) }
 
-    @Test fun maiAudioContract() = runBlocking { asr("microsoft/mai-transcribe-2") }
+    @Test fun voxtralGermanAudioContract() = runBlocking { asr(VOXTRAL_ASR_MODEL, Language.DE) }
+
+    @Test fun maiAudioContract() = runBlocking { asr(DEFAULT_ASR_MODEL) }
+
+    @Test fun maiGermanAudioContract() = runBlocking { asr(DEFAULT_ASR_MODEL, Language.DE) }
 
     @Test
     fun geminiSegmentationAndAnalysisContracts() = runBlocking {

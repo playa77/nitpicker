@@ -11,6 +11,9 @@ interface SessionDao {
     @Query("UPDATE sessions SET status=:status, ended_at=:endedAt WHERE id=:id")
     fun setStatus(id: Long, status: SessionStatus, endedAt: Long?)
 
+    @Query("UPDATE sessions SET asr_model=:model WHERE id=:id AND status IN ('ACTIVE','STOPPING')")
+    fun setAsrModelForRecovery(id: Long, model: String)
+
     @Query("UPDATE sessions SET export_uri=:uri WHERE id=:id")
     fun setExportUri(id: Long, uri: String)
 

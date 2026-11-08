@@ -282,6 +282,9 @@ class SessionRepository(private val db: AppDatabase) {
     // Infrastructure seams named by the worker/service traces but omitted from §5.3's listing.
     @Transaction
     suspend fun recoverInFlight(sessionId: Long) = transaction {
+        val session = requireNotNull(sessions.getById(sessionId))
+        if (session.asrModel !in com.nitpicker.data.settings.SettingsStore.ASR_MODELS)
+            sessions.setAsrModelForRecovery(sessionId, DEFAULT_ASR_MODEL)
         chunks.resetInFlightToCaptured(sessionId)
         jobs.resetInFlightToPending(sessionId)
     }
