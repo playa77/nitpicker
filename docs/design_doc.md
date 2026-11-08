@@ -1,9 +1,9 @@
 # Document 1 — Design Document
 
 **Title:** Nitpicker — Live Transcription, Protocol & Analysis App for Android
-**Version:** 1.0.0
-**Date:** 2026-10-04
-**Status:** Approved
+**Version:** 1.1.0
+**Date:** 2026-11-08
+**Status:** Approved — endpoint correction explicitly authorized by the operator on 2026-11-08
 **Prepared per:** Multiphase Interview Tech Docs workflow v1.2.0; based on the accepted Interview Readiness Summary of 2026-10-04.
 
 **Revision History**
@@ -11,6 +11,8 @@
 | Version | Date | Changes |
 |---|---|---|
 | 1.0.0 | 2026-10-04 | Initial draft. |
+
+| 1.1.0 | 2026-11-08 | Correct the ASR request contract to multipart OpenRouter audio transcriptions, preserving binary WAV and session language; segmentation/analysis remain chat completions. Replaces the outdated A-6 chat-audio assumption following live verification. |
 
 ---
 
@@ -135,7 +137,7 @@ Single-process Android app. A foreground service owns the audio pipeline; the UI
 1. **Capture.** `AudioCaptureEngine` records 16 kHz, mono, 16-bit PCM via `AudioRecord` (R-F1; format rationale §10 D-7).
 2. **Chunking.** `Chunker` applies energy-based VAD (pure DSP — R-N2). A chunk closes on ≥ 0.9 s of silence or at 8 s maximum speech; speech bursts shorter than 1.2 s merge into the following chunk. Each chunk is emitted with a monotonic sequence number and precise timestamps (R-F1, R-N8 lever).
 3. **Retention copy.** While the session clock is within the retention window (default 10 min, PDD-3), the chunk's exact upload bytes are copied to `AudioRetentionStore` before dispatch (R-F11, PDD-4). Beyond the window, no copy is made — discard-after-transcription applies from that mark onward (OR-9).
-4. **ASR.** `AsrClient` sends the chunk to the configured OpenRouter ASR model with the session language injected into the transcription instruction (R-F1, R-F9). Transcript text is persisted with the chunk record.
+4. **ASR.** `AsrClient` sends the chunk to the configured OpenRouter audio-transcriptions endpoint with the session language as an ISO language field and an optional verbatim instruction (R-F1, R-F9). Transcript text is persisted with the chunk record.
 5. **Segmentation.** `StatementProcessor` sends the raw transcript plus tail context (last statement text, recent speaker tags) to flash-lite, receiving structured statements: text, continuation flag, inferred speaker tag (R-F2, R-F3, PDD-1). Statements receive global IDs and render immediately — provisional, consolidated in place as later chunks arrive.
 6. **Analysis.** `AnalysisEngine` sends the new statements, a rolling window of recent statements, and the session claims digest to flash-lite in a single call (R-F6). It returns annotations of two co-equal families — fact-check (R-F4) and logic/rhetoric (R-F5) — plus new claim entries for the digest (R-F7). Annotations attach to statement IDs and render in italics (R-F8).
 7. **Persistence & export.** Every artifact is written to the Room DB as it is produced. On session stop, `MarkdownExporter` writes the protocol as `.md` to the user-accessible folder, applying the speaker rename/merge overlay (R-F10, R-F3).
@@ -175,7 +177,7 @@ The single tuning lever is maximum chunk length (5–15 s configurable): shorter
 | **AudioCaptureEngine** | `AudioRecord` reader; delivers PCM frames to Chunker; handles mic loss (route change, permission revocation) as session-fatal events with clear UI state. | R-F1 |
 | **Chunker** | Energy VAD (DSP, non-ML). Chunk boundary policy (§3.2). Emits timestamped, sequenced chunks; hands exact byte copies to AudioRetentionStore within the retention window. | R-F1, R-N2, R-F11 |
 | **AudioRetentionStore** | Stores exact upload bytes (WAV) for the first N minutes, app-private; enforces 0–10 min runtime config; prunes to the 10 most recent sessions. Temporary facility with designed removal path (A-5): setting 0 disables; deletion of the facility in a future version removes code + stored files. | R-F11, PDD-3, PDD-4 |
-| **AsrClient** | OpenRouter chat-completions audio request (§6.1) for the configured ASR model; language-injected instruction; bounded retry with backoff; returns transcript text; records per-call latency and token usage for the status panel. | R-F1, R-F9, A-6 |
+| **AsrClient** | OpenRouter multipart audio-transcriptions request (§6.1) for the configured ASR model; explicit session-language field and optional verbatim instruction; bounded retry with backoff; returns transcript text; records per-call latency for the status panel (usage only where supplied by the endpoint). | R-F1, R-F9, A-6 |
 | **StatementProcessor** | Flash-lite segmentation call (§6.2): raw transcript + tail context → structured statements. Assigns global statement IDs; merges continuations into prior statements (seam-smoothing included in prompt contract, PDD-1); assigns provisional→final lifecycle; infers speaker tags with recent-tag context. | R-F2, R-F3, PDD-1 |
 | **AnalysisEngine** | Flash-lite analysis call (§6.2): new statements + rolling window + claims digest → annotations (fact-check family and logic/rhetoric family, one call, equal standing) + claim entries appended to the digest. Prompt contract enforces observation-not-verdict phrasing and session language. | R-F4, R-F5, R-F6, R-F7 |
 | **PipelineOrchestrator** | Durable FIFO queues (ASR-pending, analysis-pending); connectivity watch; ordered drain; retry and skip policies; ordering guarantees (ASR strictly FIFO; analysis in statement order); exposes queue depth and pipeline health to the status panel. | R-F12, R-N8 |
@@ -201,25 +203,20 @@ Conceptual entities; exact DDL, indices, and migrations are Doc 2 §5 material. 
 
 ## 6. API & Interface Design
 
-### 6.1 External: OpenRouter (chat completions, all inference — R-N1)
+### 6.1 External: OpenRouter (audio transcriptions and chat completions — R-N1)
 
-Three request shapes. All use the operator's existing OpenRouter account and key. The exact audio-input parameterization follows the request shape the operator has already validated in single-speaker testing (A-6); the shapes below are the design contract.
+Three request shapes. All use the operator's existing OpenRouter account and key. ASR uses the dedicated audio-transcriptions endpoint; segmentation and analysis use chat completions. Doc 2 v1.2.0 defines the exact transport contracts.
 
-**(a) ASR request** (AsrClient, per chunk):
+**(a) ASR request** (AsrClient, per chunk): `POST /api/v1/audio/transcriptions`, multipart form-data:
 
-```json
-{
-  "model": "<openai/whisper-large-v3-turbo | microsoft/mai-transcribe-2>",
-  "messages": [{
-    "role": "user",
-    "content": [
-      { "type": "text", "text": "Transcribe this audio verbatim. Language: German. Do not translate, do not comment." },
-      { "type": "input_audio", "input_audio": { "data": "<base64 WAV>", "format": "wav" } }
-    ]
-  }]
-}
-```
-Response: transcript as message text. (If T1 — the operator's metadata probe — reveals native speaker metadata in the response, the free labels replace inferred tags; impact is localized to StatementProcessor per A-1.)
+| Field | Value |
+|---|---|
+| `model` | `openai/whisper-large-v3-turbo` or `microsoft/mai-transcribe-2` |
+| `file` | `chunk.wav`, `audio/wav`, exact binary WAV upload bytes |
+| `language` | `de` or `en`, locked to the session |
+| `prompt` | Optional verbatim/no-translation instruction from `Prompts.asrInstruction` |
+
+Response: JSON `{ "text": "transcript" }`. No chat messages or base64 audio are used for these transcription models. Native speaker metadata, if introduced and validated later, remains localized per A-1.
 
 **(b) Segmentation request** (StatementProcessor, per transcript). System prompt establishes the contract; user content carries: raw transcript, last statement text (seam context), last ~6 speaker tags, session language. Response: strict JSON — `statements: [{ text, continuesPrevious: bool, speakerTag: string|null, endsProvisionally: bool }]`. The prompt contract requires: language matching (R-F9), seam smoothing when a chunk boundary cut mid-statement (PDD-1), tags only when inferable from conversational cues, `null` otherwise (R-F3).
 
@@ -324,7 +321,7 @@ The retained first-minutes audio (exact upload bytes — PDD-4) enables the core
 - **D-7 — 16 kHz mono PCM WAV upload format.** Lossless, trivially "exact bytes" for the debug facility (PDD-4), native ASR input rate (no resample artifacts), ~32 KB/s is negligible on company Wi-Fi (R-N6). *Rejected:* lossy compression — saves bytes that do not matter here, breaks exact-bytes debuggability.
 - **D-8 — Room DB as single source of truth; UI as pure projection.** Every stage persists through the repository; UI observes Flows and never networks. This one invariant delivers buffer-and-backfill durability, process-death recovery, and UI consistency (R-F12) without a second mechanism. *Rejected:* WorkManager as a second scheduling substrate — redundant under a live foreground service.
 - **D-9 — Retention facility with designed end-state.** Default 10 min, runtime 0–10, 0 = discard-immediately (PDD-3); exact upload bytes, app-private, prune-to-10 (PDD-4). The revert to the end-state (full discard-immediately) is a settings flip; the facility's eventual code removal is tracked as A-5.
-- **D-10 — Language locked at session start, injected into every prompt.** Deterministic (one tap), avoids auto-detect failure modes; the lock is passed to ASR, segmentation, and analysis contracts (R-F9).
+- **D-10 — Language locked at session start, injected into every prompt.** Deterministic (one tap), avoids auto-detect failure modes; the lock is passed to the ASR language field and the segmentation/analysis prompt contracts (R-F9).
 - **D-11 — Jetpack Compose UI.** Standard modern choice for a scrolling-protocol app; no constraint binds to Views; Compose's `LazyColumn` handles long protocols. Low-stakes decision, easily reversed at Doc 2 if tooling argues otherwise.
 
 ---
@@ -340,7 +337,7 @@ The retained first-minutes audio (exact upload bytes — PDD-4) enables the core
 | A-3 | Android 11 (API 30) minimum; A50 supports it | Raise minSdk if a required API forces it; A50 floor re-checked (R-N4 flag duty) |
 | A-4 | A50 sustains 90-min sessions within thermal/battery tolerance | Operational mitigation only (charger, brightness); no architectural fallback in scope |
 | A-5 | Retention facility is temporary with a defined end-state | None — commitment tracked, removal path designed (D-9) |
-| A-6 | OpenRouter audio-input request shape as validated in the operator's single-speaker tests | Request shape adjusted to the validated form; AsrClient-localized |
+| A-6 | Resolved 2026-11-08: live API requires multipart `/audio/transcriptions` for both configured ASR models | Corrected in this revision and Doc 2 v1.2.0; gateway and future AsrClient use the explicit transcription operation |
 
 ### 11.2 Open questions (validation-phase, not design-blocking)
 

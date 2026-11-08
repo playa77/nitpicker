@@ -38,6 +38,10 @@ android {
         unitTests {
             isIncludeAndroidResources = true
             all {
+                val liveOpenRouter = providers.environmentVariable("NITPICKER_LIVE_OPENROUTER").orElse("0")
+                it.inputs.property("liveOpenRouter", liveOpenRouter)
+                it.outputs.upToDateWhen { liveOpenRouter.get() != "1" }
+                it.outputs.doNotCacheIf("Live OpenRouter checks must execute") { liveOpenRouter.get() == "1" }
                 it.jvmArgs(
                     "--add-exports=java.base/jdk.internal.access=ALL-UNNAMED",
                 )
@@ -81,3 +85,5 @@ dependencies {
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
+
+ksp { arg("room.schemaLocation", "$projectDir/schemas") }

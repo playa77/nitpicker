@@ -30,6 +30,14 @@ With the Android SDK configured, use the Gradle wrapper from the repository root
 ./gradlew :app:assembleDebug
 ```
 
+The ordinary suite uses scripted transport and MockWebServer. Live inference is opt-in and uses a test-runtime `OPENROUTER_API_KEY`:
+
+```bash
+NITPICKER_LIVE_OPENROUTER=1 ./gradlew :app:testDebugUnitTest --tests 'com.nitpicker.llm.OpenRouterLiveTest'
+```
+
+Live checks always execute rather than using Gradle's up-to-date/build-cache results. They exercise multipart audio transcriptions for both ASR models and chat completions for Gemini; they send only a small synthetic speech fixture and synthetic statements. Never store the test key in source or Gradle properties. Whisper currently requires an account provider-guardrail change before its live check can pass; MAI and Gemini passed on 2026-11-08. This does not change the application's configured/default model.
+
 For a signed release, create an untracked `keystore.properties` containing `storeFile`, `storePassword`, `keyAlias`, and `keyPassword`, then run:
 
 ```bash
@@ -41,9 +49,9 @@ Never commit signing credentials or keystore files. On first launch, grant the r
 
 ## Project documents
 
-- [Design document](docs/design_doc.md) — product goals, constraints, architecture, and decisions (v1.0.0, Approved).
-- [Technical specification](docs/technical_specification.md) — implementation structure, interfaces, testing, and release workflow (v1.1.0, Approved).
-- [Implementation roadmap](docs/roadmap.md) — dependency-ordered work packages and acceptance milestones (v1.1.0, Approved).
+- [Design document](docs/design_doc.md) — product goals, constraints, architecture, and decisions (v1.1.0, Approved).
+- [Technical specification](docs/technical_specification.md) — implementation structure, interfaces, testing, and release workflow (v1.2.0, Approved).
+- [Implementation roadmap](docs/roadmap.md) — dependency-ordered work packages and acceptance milestones (v1.2.0, Approved).
 
 ## License
 
