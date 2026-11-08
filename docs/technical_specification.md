@@ -1,10 +1,10 @@
 # Document 2 — Technical Specification
 
 **Title:** Nitpicker — Technical Specification
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Date:** 2026-11-08
-**Status:** Approved — endpoint revision explicitly authorized by the operator on 2026-11-08 (supersedes v1.1.0)
-**Baseline:** Doc 1 v1.1.0 (Design Document). Document 3 v1.2.0 (Implementation Roadmap) is re-audited against this v1.2.0. Cross-references cite "Doc 1 §x".
+**Status:** Approved — ASR model replacement explicitly authorized by the operator on 2026-11-08 (supersedes v1.2.0)
+**Baseline:** Doc 1 v1.2.0 (Design Document). Document 3 v1.3.0 (Implementation Roadmap) is re-audited against this v1.3.0. Cross-references cite "Doc 1 §x".
 **Prepared per:** Multiphase Interview Tech Docs workflow v1.2.0.
 
 **Revision History**
@@ -15,6 +15,8 @@
 | 1.1.0 | 2026-10-04 | Type/file closure fixes discovered during Doc 3 composition: §8.0 gains `SettingsSnapshot` and §4.1 specifies `SettingsStore.snapshot()`; §8.13 gains `SessionLog.deleteForSession()`; §2 project tree gains `ui/MainActivity.kt` and `ui/navigation/AppNav.kt`; §8.7 prompt source listings cleaned of string-escaping artifacts (no prompt-text change). No behavioral or capability changes. |
 
 | 1.2.0 | 2026-11-08 | Operator-authorized correction after live API verification: ASR uses multipart `/audio/transcriptions` with binary WAV, ISO language and optional verbatim prompt; add `postTranscription` and typed request/response contracts. Chat completions remain the segmentation/analysis route. Update S7, T2, client and harness contracts. Provider guardrails remain an external access prerequisite. |
+
+| 1.3.0 | 2026-11-08 | Rebind to Doc 1 v1.2.0. Default ASR is microsoft/mai-transcribe-2; the second selection is mistralai/voxtral-mini-transcribe-3-0. Removed/unsupported saved selections fall back to MAI; in-flight session recovery updates only ACTIVE/STOPPING session model metadata before dispatch. Historical completed/failed sessions are unchanged. Endpoint and other contracts are unchanged. |
 
 ---
 
@@ -119,7 +121,7 @@ Nitpicker/
 
 | Key | Type | Default | Range | Traces |
 |---|---|---|---|---|
-| `asr_model` | String | `openai/whisper-large-v3-turbo` | {`openai/whisper-large-v3-turbo`, `microsoft/mai-transcribe-2`} | R-F1 |
+| `asr_model` | String | `microsoft/mai-transcribe-2` | {`microsoft/mai-transcribe-2`, `mistralai/voxtral-mini-transcribe-3-0`} | R-F1 |
 | `retention_minutes` | Int | 10 | 0–10 (0 = discard-immediately) | R-F11, PDD-3 |
 | `chunk_max_sec` | Int | 8 | 5–15 | R-N8 lever |
 | `vad_silence_ms` | Int | 900 | 400–2000 | D-4 |
@@ -369,9 +371,9 @@ Two explicit operations share one OpenRouter gateway, credential provider, retry
 - `postChat`: `POST {baseUrl}/chat/completions`, `Content-Type: application/json`, for segmentation and analysis.
 - `postTranscription`: `POST {baseUrl}/audio/transcriptions`, `Content-Type: multipart/form-data` with a generated boundary. Fields: `model`, `language` (`de` or `en`), optional `prompt`, and `file` (`chunk.wav`, `audio/wav`, exact stored WAV bytes). No base64 wrapper or chat message is sent.
 
-Both send `Authorization: Bearer <key>`; optional attribution headers are `HTTP-Referer: nitpicker.local` and `X-Title: Nitpicker` (D-12). Redirects and hidden client retries are disabled. HTTP 404 caused by provider/data-policy/guardrail restrictions is a non-retryable routing/access error, not proof of an invalid API key. Do not switch models, bypass account policies, or change credentials automatically.
+Both send `Authorization: Bearer <key>`; optional attribution headers are `HTTP-Referer: nitpicker.local` and `X-Title: Nitpicker` (D-12). Redirects and hidden client retries are disabled. HTTP 404 caused by provider/data-policy/guardrail restrictions is a non-retryable routing/access error, not proof of an invalid API key. Do not fall back between supported models, bypass account policies, or change credentials automatically. The operator-authorized removal migration is the sole exception: unsupported saved settings resolve to MAI; recovery updates unsupported ASR models only for ACTIVE/STOPPING sessions before workers dispatch. Completed/failed historical sessions are not rewritten.
 
-Live verification on 2026-11-08 established that both configured transcription models explicitly reject the chat endpoint. This replaces the former A-6 request-shape assumption with a dedicated audio endpoint contract.
+Initial live verification on 2026-11-08 established that the original MAI/Whisper selections reject the chat endpoint. The operator-authorized MAI/Voxtral 3 selections are verified through multipart transcriptions. This replaces the former A-6 request-shape assumption with a dedicated audio endpoint contract.
 
 
 ### 6.2 DTOs (llm/ChatModels.kt)
@@ -655,7 +657,7 @@ Reads `repo.sessionForExport` (production read path), applies `speaker_mappings`
 ```markdown
 # Meeting Protocol — 2026-10-04 14:30 (DE)
 - Started: 14:30:12 · Ended: 15:47:03 · Duration: 77 min
-- Language: DE · ASR: openai/whisper-large-v3-turbo · Statements: 214 · Annotations: 61
+- Language: DE · ASR: microsoft/mai-transcribe-2 · Statements: 214 · Annotations: 61
 
 **[00:03:41] S2?** Wir hatten im Q3 einen Umsatz von 4,2 Millionen Euro.
 *Fact-check: The published Q3 figure was 3.9m EUR (internal knowledge); possible mismatch.*

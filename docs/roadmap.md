@@ -1,11 +1,11 @@
 # Document 3 — Implementation Roadmap
 
 **Title:** Nitpicker — Implementation Roadmap
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Date:** 2026-11-08
-**Status:** Approved — operator-authorized endpoint correction (supersedes v1.1.0)
-**Baseline:** Doc 1 v1.1.0 (Design Document, endpoint revision approved 2026-11-08); Doc 2 v1.2.0 (Technical Specification, endpoint revision, 2026-11-08).
-**Reference binding:** In this document, "Doc 1" ≡ Doc 1 v1.1.0 and "Doc 2" ≡ Doc 2 v1.2.0. All section citations resolve against these versions. Version pins are stated explicitly wherever the citation is load-bearing (§3, §5, §6, §7).
+**Status:** Approved — operator-authorized ASR model replacement (supersedes v1.2.0)
+**Baseline:** Doc 1 v1.2.0 (Design Document, endpoint revision approved 2026-11-08); Doc 2 v1.3.0 (Technical Specification, endpoint revision, 2026-11-08).
+**Reference binding:** In this document, "Doc 1" ≡ Doc 1 v1.2.0 and "Doc 2" ≡ Doc 2 v1.3.0. All section citations resolve against these versions. Version pins are stated explicitly wherever the citation is load-bearing (§3, §5, §6, §7).
 **Prepared per:** Multiphase Interview Tech Docs workflow v1.2.0.
 
 **Revision History**
@@ -16,6 +16,8 @@
 | 1.1.0 | 2026-10-04 | Re-audited against the fully re-delivered Doc 2 v1.1.0 and re-issued (superseding the withdrawn "remains valid without changes" claim): (1) reference binding established — all cross-references now resolve to Doc 1 v1.0.0 / Doc 2 v1.1.0 per the workflow's cross-citation rule; (2) WP-05 task list aligned to the complete SettingsStore public surface of Doc 2 v1.1.0 §4.1; (3) WP-11/WP-12 terminal flows now cite `settings.snapshot()` (seam S30 of Doc 2 v1.1.0 §15.1); (4) WP-17 scope and the §6 matrix name MainActivity/AppNav explicitly (Doc 2 v1.1.0 §2, §8.14); (5) WP-19 contracts name `SessionLog.deleteForSession` (Doc 2 v1.1.0 §8.13); (6) completion-criteria seam audit extended to S1–S30. No work package added, removed, or reordered; dependency graph unchanged. |
 
 | 1.2.0 | 2026-11-08 | Re-audited against Doc 1 v1.1.0 and Doc 2 v1.2.0 after operator-authorized ASR endpoint correction. WP-06/07/09/10 contracts now name typed multipart transcriptions and cross-endpoint scripted ordering; S7 and T2 use `postTranscription`. All 22 WP boundaries, dependency edges, milestones and remaining seam IDs are unchanged. |
+
+| 1.3.0 | 2026-11-08 | Re-audited against Doc 1 v1.2.0 and Doc 2 v1.3.0 for the authorized MAI/Voxtral 3 model selection and legacy-selection recovery. Existing ASR, settings, recovery, gateway, and live-test packages consume these changes; all 22 WP boundaries, dependencies, milestones and S1–S30 seam identities remain unchanged. |
 
 ---
 
@@ -31,7 +33,7 @@
 - **P4 — UI** (WP-17…19): scaffold + Start + Settings; Live + StatusPanel; List + Detail.
 - **P5 — Verification & release** (WP-20…22): integration harness + TC-PIPE-1…5; TC-PIPE-6…9; acceptance + release.
 
-**Consumption model.** The coding agent executes **one work package per session, strictly in dependency order**. Session inputs: Doc 1 v1.1.0, Doc 2 v1.2.0, this document (Doc 3 v1.2.0), and the repo at `main` with all dependency WPs merged. The agent never edits the spec documents; discoveries are reported as `[CONFLICT]`/`[ASSUMPTION]` in the WP report, never silently designed around. If any spec document is revised, this roadmap is re-audited and re-issued before further WPs execute (baseline-propagation rule, per this document's own revision history).
+**Consumption model.** The coding agent executes **one work package per session, strictly in dependency order**. Session inputs: Doc 1 v1.2.0, Doc 2 v1.3.0, this document (Doc 3 v1.3.0), and the repo at `main` with all dependency WPs merged. The agent never edits the spec documents; discoveries are reported as `[CONFLICT]`/`[ASSUMPTION]` in the WP report, never silently designed around. If any spec document is revised, this roadmap is re-audited and re-issued before further WPs execute (baseline-propagation rule, per this document's own revision history).
 
 ## 2. Global Conventions
 
@@ -52,7 +54,7 @@
 
 ## 3. Dependency Graph
 
-Acyclic; verified by inspection (every WP depends only on lower numbers). All spec surfaces consumed are those of **Doc 2 v1.2.0**.
+Acyclic; verified by inspection (every WP depends only on lower numbers). All spec surfaces consumed are those of **Doc 2 v1.3.0**.
 
 | WP | Title | Depends on | Parallelizable with |
 |---|---|---|---|
@@ -79,7 +81,7 @@ Acyclic; verified by inspection (every WP depends only on lower numbers). All sp
 | WP-21 | Integration TC-PIPE-6…9 | WP-20 | WP-17…19 |
 | WP-22 | On-device acceptance + release | WP-16…WP-21 (all) | — |
 
-**Contract-closure audit of verification requirements:** every capability a WP's verification needs is produced by an earlier WP, defined in Doc 2 v1.2.0, or explicitly operator-provided (credentials, hardware, human speakers — WP-18/M3 and WP-22, stated there). No WP's verification consumes an unreachable module, hand-built state, or an unspecified credential.
+**Contract-closure audit of verification requirements:** every capability a WP's verification needs is produced by an earlier WP, defined in Doc 2 v1.3.0, or explicitly operator-provided (credentials, hardware, human speakers — WP-18/M3 and WP-22, stated there). No WP's verification consumes an unreachable module, hand-built state, or an unspecified credential.
 
 ## 4. Work Packages
 
@@ -319,7 +321,7 @@ Verification: `./gradlew :app:testDebugUnitTest` → all green.
 ---
 
 **WP-22 — On-device acceptance + release** · P5 · dep WP-16…21 (all) · **M**
-*Objective:* execute the Doc 2 v1.2.0 §14 acceptance criteria on real hardware and produce the signed release APK — the project's definition of done.
+*Objective:* execute the Doc 2 v1.3.0 §14 acceptance criteria on real hardware and produce the signed release APK — the project's definition of done.
 Scope: release signing config in `app/build.gradle.kts` (`keystore.properties`, git-ignored), acceptance execution + result recording in `docs/wp-reports/WP-22.md`. Out of scope: new features; any fix beyond defect correction.
 Spec refs: Doc 2 §13 (release build), §14 (AC-1…11 verbatim), Doc 1 §9.
 Tasks: (1) release signing wiring; (2) `assembleRelease` → signed APK; (3) execute AC-1…11 per their §14 procedures (AC-1/2 via session-log ↔ retained-audio comparison; AC-8 two-speaker DE/EN session with annotation review against retained audio); (4) record results; defects → patch commits on the WP branch → re-run affected ACs; structural discoveries → `[CONFLICT]` report, not local redesign; (5) final versionName 1.0.0.
@@ -338,13 +340,13 @@ Verification: `./gradlew :app:assembleRelease` → signed APK installs over prev
 | **M3** | WP-18 | **First light:** full live loop on device — mic → protocol → annotations → export | operator procedure in WP-18 (real key, 2-voice session, latency eyeball vs. AC-1) |
 | **M4** | WP-19 | Complete app usable end-to-end manually | start→stop→list→detail→rename→merge→re-export on device |
 | **M5** | WP-21 | Automated integration suite green | full `testDebugUnitTest` incl. TC-PIPE-1…9 |
-| **M6** | WP-22 | Acceptance verified; signed release APK | AC-1…11 (Doc 2 v1.2.0 §14) executed and recorded; `assembleRelease` |
+| **M6** | WP-22 | Acceptance verified; signed release APK | AC-1…11 (Doc 2 v1.3.0 §14) executed and recorded; `assembleRelease` |
 
 Between M2 and M3 the system "runs" only under scripted transport (by design — M3 is the first point where the real OpenRouter credential and microphone enter, and both are operator-provided contracts, not agent-producible ones).
 
 ## 6. Coverage & Traceability Matrix
 
-**Doc 2 v1.2.0 §1 scope items → WPs:**
+**Doc 2 v1.3.0 §1 scope items → WPs:**
 
 | §1 item | WPs |
 |---|---|
@@ -356,7 +358,7 @@ Between M2 and M3 the system "runs" only under scripted transport (by design —
 | 6. Debug/observability facility | WP-08 (log/metrics), WP-18 (status panel) |
 | 7. Test suite + acceptance | WP-02…13 (distributed unit), WP-20, 21 (integration), WP-22 (acceptance) |
 
-**Doc 2 v1.2.0 §8 modules → WPs:**
+**Doc 2 v1.3.0 §8 modules → WPs:**
 
 | Module | WP |
 |---|---|
@@ -381,16 +383,16 @@ Between M2 and M3 the system "runs" only under scripted transport (by design —
 
 **Additional spec surfaces:** §4.1 settings surface → WP-05 (produced) + WP-17 (consumed); §5.2 DAOs → WP-02; §5.3 repository → WP-03; §6 DTOs → WP-06/07/10; §7 auth/permissions → WP-05 (key), WP-01/16/17 (permissions); §12 tests → distributed + WP-20/21; §13 build/deploy → WP-01/22; §14 AC-1…11 → WP-22 (AC-11 seeded in WP-05).
 
-**Union check:** every Doc 2 v1.2.0 §1 item and every §8 module (including the v1.1.0 additions: `SettingsSnapshot`, `SessionLog.deleteForSession`, MainActivity/AppNav) maps to ≥1 WP; the union of all WPs equals 100% of spec scope. Beyond-scope content is limited to declared process artifacts (`docs/wp-reports/`, milestone version bumps) — no application capability outside Doc 2 exists in any WP.
+**Union check:** every Doc 2 v1.3.0 §1 item and every §8 module (including the v1.1.0 additions: `SettingsSnapshot`, `SessionLog.deleteForSession`, MainActivity/AppNav) maps to ≥1 WP; the union of all WPs equals 100% of spec scope. Beyond-scope content is limited to declared process artifacts (`docs/wp-reports/`, milestone version bumps) — no application capability outside Doc 2 exists in any WP.
 
 ## 7. Completion Criteria
 
-The project is complete when all of the following hold — mirroring Doc 2 v1.2.0 §14:
+The project is complete when all of the following hold — mirroring Doc 2 v1.3.0 §14:
 
 1. All 22 WPs merged with their verification green; full `./gradlew :app:testDebugUnitTest` (unit + gateway + integration) passes on a clean checkout.
-2. AC-1…11 of Doc 2 v1.2.0 §14 executed on the target device and recorded (waivers explicit, none silent).
+2. AC-1…11 of Doc 2 v1.3.0 §14 executed on the target device and recorded (waivers explicit, none silent).
 3. `./gradlew :app:assembleRelease` produces a signed APK that installs and runs the M3/M4 smoke procedures on the A50-class floor device.
 4. Spec-of-record integrity: Docs 1–3 unchanged except through versioned revisions; every deviation discovered during implementation exists as a `[CONFLICT]`/`[ASSUMPTION]` entry in a WP report with its resolution. Any future revision of Doc 1 or Doc 2 triggers a re-audit and re-issue of this roadmap before further WPs execute.
-5. Caller existence at runtime verified: no interface, module, or type ships without a caller (enforced per-WP in the DoD, audited in WP-22 via the M3/M4 smokes exercising **every seam S1–S30** of Doc 2 v1.2.0 §15.1).
+5. Caller existence at runtime verified: no interface, module, or type ships without a caller (enforced per-WP in the DoD, audited in WP-22 via the M3/M4 smokes exercising **every seam S1–S30** of Doc 2 v1.3.0 §15.1).
 
 ---

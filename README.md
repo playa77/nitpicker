@@ -36,7 +36,9 @@ The ordinary suite uses scripted transport and MockWebServer. Live inference is 
 NITPICKER_LIVE_OPENROUTER=1 ./gradlew :app:testDebugUnitTest --tests 'com.nitpicker.llm.OpenRouterLiveTest'
 ```
 
-Live checks always execute rather than using Gradle's up-to-date/build-cache results. They exercise multipart audio transcriptions for both ASR models and chat completions for Gemini; they send only a small synthetic speech fixture and synthetic statements. Never store the test key in source or Gradle properties. Whisper currently requires an account provider-guardrail change before its live check can pass; MAI and Gemini passed on 2026-11-08. This does not change the application's configured/default model.
+Live checks always execute rather than using Gradle's up-to-date/build-cache results. The selectable ASR models are `microsoft/mai-transcribe-2` (default) and `mistralai/voxtral-mini-transcribe-3-0`; OpenAI Whisper is removed. Existing unsupported saved selections and resumable session configurations migrate to MAI. Completed historical sessions retain their original model metadata.
+
+The checks send only short synthetic German/English speech and synthetic statements. They exercise each model's multipart transcription and production ASR → Gemini segmentation → analysis clients. Run all live checks with `NITPICKER_LIVE_OPENROUTER=1 ./gradlew :app:testDebugUnitTest --tests '*OpenRouter*LiveTest*'`. Never store the test key in source or Gradle properties. The current guardrail allows Azure, Mistral and Google AI Studio; its dated model snapshots resolve from the configured aliases. Live German/English gateway and production-client checks passed for MAI and Voxtral 3 on 2026-11-08 (one initial MAI HTTP 429 passed on a focused rerun). Gemini segmentation/analysis also passed.
 
 For a signed release, create an untracked `keystore.properties` containing `storeFile`, `storePassword`, `keyAlias`, and `keyPassword`, then run:
 
@@ -47,11 +49,17 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 
 Never commit signing credentials or keystore files. On first launch, grant the requested permissions and enter the OpenRouter API key in Settings.
 
+## Implementation status
+
+WP-01–WP-21 are implemented, with the nine scripted PCM-to-export integration scenarios in `TCPipeTest` and focused client/worker tests. The current debug milestone is 0.5.0. Run the full suite and build with the commands above; live tests additionally include `com.nitpicker.llm.OpenRouterClientsLiveTest` (select `--tests '*OpenRouter*LiveTest*'` to run all live checks).
+
+Physical-device M3/M4 smoke checks and WP-22 acceptance/signing remain outstanding. No device or emulator was available in the implementation environment; an API key alone cannot validate microphone behavior, two-speaker usability, latency, or MediaStore visibility. See the per-package reports for verification and assumptions, and the [ASR model update report](docs/wp-reports/ASR-model-update-2026-11-08.md) for the current model configuration and bilingual live results. The runtime environment key is used only by opt-in tests and is never installed into app settings or the APK.
+
 ## Project documents
 
-- [Design document](docs/design_doc.md) — product goals, constraints, architecture, and decisions (v1.1.0, Approved).
-- [Technical specification](docs/technical_specification.md) — implementation structure, interfaces, testing, and release workflow (v1.2.0, Approved).
-- [Implementation roadmap](docs/roadmap.md) — dependency-ordered work packages and acceptance milestones (v1.2.0, Approved).
+- [Design document](docs/design_doc.md) — product goals, constraints, architecture, and decisions (v1.2.0, Approved).
+- [Technical specification](docs/technical_specification.md) — implementation structure, interfaces, testing, and release workflow (v1.3.0, Approved).
+- [Implementation roadmap](docs/roadmap.md) — dependency-ordered work packages and acceptance milestones (v1.3.0, Approved).
 
 ## License
 

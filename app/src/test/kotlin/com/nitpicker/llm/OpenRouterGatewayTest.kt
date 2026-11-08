@@ -150,7 +150,7 @@ class OpenRouterGatewayTest {
     @Test
     fun transcriptionSendsExactWavAndLanguageAsMultipartForBothModels() = runBlocking {
         val wav = byteArrayOf(82, 73, 70, 70, 0, 0, 0, 0, 87, 65, 86, 69, 0, -1)
-        for (model in listOf("openai/whisper-large-v3-turbo", "microsoft/mai-transcribe-2")) {
+        for (model in com.nitpicker.data.settings.SettingsStore.ASR_MODELS) {
             server.enqueue(
                 MockResponse().setBody("""{"text":"Guten Morgen","provider_metadata":true}""")
             )

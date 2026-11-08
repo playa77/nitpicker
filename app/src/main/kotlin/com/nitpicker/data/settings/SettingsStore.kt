@@ -10,6 +10,8 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import com.nitpicker.domain.SettingsSnapshot
+import com.nitpicker.domain.DEFAULT_ASR_MODEL
+import com.nitpicker.domain.VOXTRAL_ASR_MODEL
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -35,6 +37,8 @@ internal constructor(
     private val retentionKey = intPreferencesKey("retention_minutes")
     private val chunkKey = intPreferencesKey("chunk_max_sec")
     private val vadKey = intPreferencesKey("vad_silence_ms")
+    // Ciphertext fingerprint changes when a key is replaced or cleared; never exposes the key.
+    val credentialVersion: Flow<Int> = store.data.map { (it[cipherKey] to it[ivKey]).hashCode() }.distinctUntilChanged()
     val apiKeySet: Flow<Boolean> =
         store.data
             .map { !it[cipherKey].isNullOrBlank() && !it[ivKey].isNullOrBlank() }
@@ -102,7 +106,7 @@ internal constructor(
     }
 
     companion object {
-        val ASR_MODELS = listOf("openai/whisper-large-v3-turbo", "microsoft/mai-transcribe-2")
+        val ASR_MODELS = listOf(DEFAULT_ASR_MODEL, VOXTRAL_ASR_MODEL)
         private const val ALIAS = "nitpicker.openrouter"
 
         @Synchronized

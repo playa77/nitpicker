@@ -4,6 +4,8 @@ import com.nitpicker.data.db.*
 import com.nitpicker.llm.SegmentedStatement
 
 const val SAMPLE_RATE_HZ = 16000
+const val DEFAULT_ASR_MODEL = "microsoft/mai-transcribe-2"
+const val VOXTRAL_ASR_MODEL = "mistralai/voxtral-mini-transcribe-3-0"
 const val ANALYSIS_MODEL = "google/gemini-3.1-flash-lite"
 const val OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 const val MIN_SPEECH_MERGE_MS = 1200
@@ -69,7 +71,7 @@ data class SessionParams(
 )
 
 data class SettingsSnapshot(
-    val asrModel: String = "openai/whisper-large-v3-turbo",
+    val asrModel: String = DEFAULT_ASR_MODEL,
     val retentionMinutes: Int = 10,
     val chunkMaxSec: Int = 8,
     val vadSilenceMs: Int = 900,
@@ -125,6 +127,7 @@ data class PipelineSnapshot(
     val llmCalls: Int = 0,
     val asrFailures: Int = 0,
     val llmFailures: Int = 0,
+    val lastError: String? = null,
 )
 
 data class ExportOutcome(
